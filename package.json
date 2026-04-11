@@ -1,6 +1,6 @@
 {
   "name": "@markoonakic/pi-working-line",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude-style working message phrases and elapsed timer for Pi.",
   "type": "module",
   "license": "MIT",
