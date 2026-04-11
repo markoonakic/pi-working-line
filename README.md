@@ -1,9 +1,11 @@
-# @markoonakic/pi-working-line
+# Pi Working Line
 
-Claude-style working messages for [pi](https://github.com/badlogic/pi-mono).
+Claude-style working messages for [Pi](https://github.com/badlogic/pi-mono).
 
 `pi-working-line` replaces Pi's default working message with a per-turn phrase
 and an elapsed timer.
+
+![Pi Working Line menu](https://raw.githubusercontent.com/markoonakic/pi-working-line/main/assets/working-line-menu.png)
 
 ```text
 Baking... · 12s
