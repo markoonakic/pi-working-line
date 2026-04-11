@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { DEFAULT_CONFIG, loadConfigFromSettingsFile, normalizeConfig } from "../src/config.js";
+import {
+  DEFAULT_CONFIG,
+  loadConfigFromSettingsFile,
+  loadConfigFromSettingsFiles,
+  normalizeConfig
+} from "../src/config.js";
 
 describe("normalizeConfig", () => {
   test("uses defaults for missing config", () => {
@@ -65,6 +70,42 @@ describe("normalizeConfig", () => {
     expect(config.phrases).toEqual({ mode: "replace", verbs: ["Valid"] });
   });
 
+  test("merges partial config over an existing fallback", () => {
+    const config = normalizeConfig(
+      {
+        segments: {
+          thinking: false
+        },
+        phrases: {
+          verbs: ["Project"]
+        }
+      },
+      {
+        ...DEFAULT_CONFIG,
+        phrases: {
+          mode: "append",
+          verbs: ["Global"]
+        },
+        segments: {
+          phrase: true,
+          suffix: false,
+          elapsed: true,
+          thinking: true,
+          tokens: true
+        }
+      }
+    );
+
+    expect(config.segments).toEqual({
+      phrase: true,
+      suffix: false,
+      elapsed: true,
+      thinking: false,
+      tokens: true
+    });
+    expect(config.phrases).toEqual({ mode: "append", verbs: ["Project"] });
+  });
+
   test("loads nested package config from settings.json", () => {
     const config = loadConfigFromSettingsFile("/tmp/settings.json", () => JSON.stringify({
       "pi-working-line": {
@@ -81,6 +122,49 @@ describe("normalizeConfig", () => {
     expect(config.segments.tokens).toBe(true);
     expect(config.segments.phrase).toBe(true);
     expect(config.phrases.verbs).toEqual(["Consulting"]);
+  });
+
+  test("loads project settings over global settings", () => {
+    const files = new Map([
+      ["/global/settings.json", JSON.stringify({
+        "pi-working-line": {
+          phrases: {
+            mode: "append",
+            verbs: ["Global"]
+          },
+          segments: {
+            suffix: false,
+            tokens: true
+          }
+        }
+      })],
+      ["/project/.pi/settings.json", JSON.stringify({
+        "pi-working-line": {
+          segments: {
+            thinking: false
+          }
+        }
+      })]
+    ]);
+
+    const config = loadConfigFromSettingsFiles(
+      "/global/settings.json",
+      "/project/.pi/settings.json",
+      (path) => {
+        const file = files.get(path);
+        if (!file) throw new Error(`missing ${path}`);
+        return file;
+      }
+    );
+
+    expect(config.phrases.verbs).toEqual(["Global"]);
+    expect(config.segments).toEqual({
+      phrase: true,
+      suffix: false,
+      elapsed: true,
+      thinking: false,
+      tokens: true
+    });
   });
 
   test("falls back to defaults when settings.json cannot be read", () => {

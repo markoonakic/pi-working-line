@@ -56,35 +56,46 @@ function optionalPositiveNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function normalizePhraseConfig(value: unknown): PhraseConfig {
+function normalizePhraseConfig(value: unknown, fallback: PhraseConfig): PhraseConfig {
   const input = asRecord(value);
-  const mode = input.mode === "replace" ? "replace" : DEFAULT_CONFIG.phrases.mode;
+  const mode = input.mode === "replace" || input.mode === "append" ? input.mode : fallback.mode;
   const verbs = Array.isArray(input.verbs)
-    ? input.verbs.filter((verb): verb is string => typeof verb === "string" && verb.trim().length > 0)
-    : DEFAULT_CONFIG.phrases.verbs;
+    ? input.verbs
+      .filter((verb): verb is string => typeof verb === "string" && verb.trim().length > 0)
+      .map((verb) => verb.trim())
+    : [...fallback.verbs];
   return { mode, verbs };
 }
 
-export function normalizeConfig(value: unknown): WorkingLineConfig {
+export function normalizeConfig(value: unknown, fallback: WorkingLineConfig = DEFAULT_CONFIG): WorkingLineConfig {
   const input = asRecord(value);
   const rawSegments = asRecord(input.segments);
   const rawTurnDuration = asRecord(input.turnDuration);
 
   return {
-    enabled: optionalBoolean(input.enabled, DEFAULT_CONFIG.enabled),
-    phrases: normalizePhraseConfig(input.phrases),
+    enabled: optionalBoolean(input.enabled, fallback.enabled),
+    phrases: normalizePhraseConfig(input.phrases, fallback.phrases),
     segments: {
-      phrase: optionalBoolean(rawSegments.phrase, DEFAULT_CONFIG.segments.phrase),
-      suffix: optionalBoolean(rawSegments.suffix, DEFAULT_CONFIG.segments.suffix),
-      elapsed: optionalBoolean(rawSegments.elapsed, DEFAULT_CONFIG.segments.elapsed),
-      thinking: optionalBoolean(rawSegments.thinking, DEFAULT_CONFIG.segments.thinking),
-      tokens: optionalBoolean(rawSegments.tokens, DEFAULT_CONFIG.segments.tokens)
+      phrase: optionalBoolean(rawSegments.phrase, fallback.segments.phrase),
+      suffix: optionalBoolean(rawSegments.suffix, fallback.segments.suffix),
+      elapsed: optionalBoolean(rawSegments.elapsed, fallback.segments.elapsed),
+      thinking: optionalBoolean(rawSegments.thinking, fallback.segments.thinking),
+      tokens: optionalBoolean(rawSegments.tokens, fallback.segments.tokens)
     },
     turnDuration: {
-      enabled: optionalBoolean(rawTurnDuration.enabled, DEFAULT_CONFIG.turnDuration.enabled),
-      thresholdMs: optionalPositiveNumber(rawTurnDuration.thresholdMs, DEFAULT_CONFIG.turnDuration.thresholdMs)
+      enabled: optionalBoolean(rawTurnDuration.enabled, fallback.turnDuration.enabled),
+      thresholdMs: optionalPositiveNumber(rawTurnDuration.thresholdMs, fallback.turnDuration.thresholdMs)
     }
   };
+}
+
+function loadRawConfigFromSettingsFile(
+  settingsPath: string,
+  readFile: (path: string, encoding: BufferEncoding) => string
+): unknown {
+  const raw = JSON.parse(readFile(settingsPath, "utf8")) as unknown;
+  const settings = asRecord(raw);
+  return settings[SETTINGS_KEY];
 }
 
 export function loadConfigFromSettingsFile(
@@ -92,10 +103,28 @@ export function loadConfigFromSettingsFile(
   readFile: (path: string, encoding: BufferEncoding) => string
 ): WorkingLineConfig {
   try {
-    const raw = JSON.parse(readFile(settingsPath, "utf8")) as unknown;
-    const settings = asRecord(raw);
-    return normalizeConfig(settings[SETTINGS_KEY]);
+    return normalizeConfig(loadRawConfigFromSettingsFile(settingsPath, readFile));
   } catch {
     return DEFAULT_CONFIG;
+  }
+}
+
+export function loadConfigFromSettingsFiles(
+  globalSettingsPath: string,
+  projectSettingsPath: string,
+  readFile: (path: string, encoding: BufferEncoding) => string
+): WorkingLineConfig {
+  let config = DEFAULT_CONFIG;
+
+  try {
+    config = normalizeConfig(loadRawConfigFromSettingsFile(globalSettingsPath, readFile));
+  } catch {
+    config = DEFAULT_CONFIG;
+  }
+
+  try {
+    return normalizeConfig(loadRawConfigFromSettingsFile(projectSettingsPath, readFile), config);
+  } catch {
+    return config;
   }
 }
