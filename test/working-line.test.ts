@@ -13,9 +13,9 @@ function createMockPi() {
         handlers.set(event, list);
       }
     },
-    emit(event: string, ctx: any = {}) {
+    emit(event: string, ctx: any = {}, payload: Record<string, unknown> = {}) {
       for (const handler of handlers.get(event) ?? []) {
-        handler({ type: event }, ctx);
+        handler({ type: event, ...payload }, ctx);
       }
     }
   };
@@ -98,5 +98,114 @@ describe("installWorkingLine", () => {
 
     expect(setWorkingMessage).toHaveBeenCalledTimes(2);
     expect(setWorkingMessage).toHaveBeenLastCalledWith();
+  });
+
+  test("shows current tool suffix while a tool is running", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      now: () => Date.now()
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    emit("tool_execution_start", { ui: { setWorkingMessage } }, { toolCallId: "tool-1", toolName: "bash" });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · running bash · 0s");
+
+    emit("tool_execution_end", { ui: { setWorkingMessage } }, { toolCallId: "tool-1", toolName: "bash" });
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 0s");
+  });
+
+  test("shows thinking status and then thought duration", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      now: () => Date.now()
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    emit("message_update", { ui: { setWorkingMessage } }, {
+      assistantMessageEvent: { type: "thinking_start" }
+    });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 0s · thinking");
+
+    vi.advanceTimersByTime(8_000);
+    emit("message_update", { ui: { setWorkingMessage } }, {
+      assistantMessageEvent: { type: "thinking_end" }
+    });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 8s · thought for 8s");
+  });
+
+  test("shows optional estimated token count from text deltas", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      now: () => Date.now(),
+      config: {
+        segments: {
+          tokens: true
+        }
+      }
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    emit("message_update", { ui: { setWorkingMessage } }, {
+      assistantMessageEvent: { type: "text_delta", delta: "x".repeat(7200) }
+    });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 0s · ↓ 1.8k tokens");
+  });
+
+  test("sends optional turn duration message after long turns", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    const sendMessage = vi.fn();
+    installWorkingLine({ ...pi, sendMessage } as any, {
+      phrases: ["Baking"],
+      now: () => Date.now(),
+      config: {
+        turnDuration: {
+          enabled: true,
+          thresholdMs: 30_000
+        }
+      }
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    vi.advanceTimersByTime(31_000);
+    emit("agent_end", { ui: { setWorkingMessage } });
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      customType: "pi-working-line",
+      content: "Baked for 31s",
+      display: true,
+      details: {
+        durationMs: 31_000,
+        phrase: "Baking"
+      }
+    });
+  });
+
+  test("does nothing when disabled", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      now: () => Date.now(),
+      config: {
+        enabled: false
+      }
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    vi.advanceTimersByTime(5_000);
+    emit("agent_end", { ui: { setWorkingMessage } });
+
+    expect(setWorkingMessage).not.toHaveBeenCalled();
   });
 });
