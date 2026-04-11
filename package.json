@@ -5,6 +5,17 @@
   "type": "module",
   "license": "MIT",
   "author": "Marko Nakic",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/markoonakic/pi-working-line.git"
+  },
+  "bugs": {
+    "url": "https://github.com/markoonakic/pi-working-line/issues"
+  },
+  "homepage": "https://github.com/markoonakic/pi-working-line#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "pi-package",
     "pi",
