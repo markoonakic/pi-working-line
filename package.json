@@ -1,0 +1,40 @@
+{
+  "name": "@markoonakic/pi-working-line",
+  "version": "0.1.0",
+  "description": "Claude-style working message phrases and elapsed timer for Pi.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Marko Nakic",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "working-message",
+    "spinner"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.66.1",
+    "@types/node": "^25.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
