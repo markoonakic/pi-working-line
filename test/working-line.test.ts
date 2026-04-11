@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { WorkingLineConfig } from "../src/config.js";
 import { installWorkingLine } from "../src/working-line.js";
 
 type Handler = (event: unknown, ctx: any) => void;
@@ -27,6 +28,35 @@ function createMockPi() {
       if (!command) throw new Error(`Missing command: ${name}`);
       return command;
     }
+  };
+}
+
+function createPanelTestRuntime() {
+  const rendered: string[] = [];
+  const tui = { requestRender: vi.fn() };
+  const theme = {
+    fg: (color: string, text: string) => `<${color}>${text}</${color}>`
+  };
+  const keybindings = {};
+
+  return { rendered, tui, theme, keybindings };
+}
+
+function createMemoryConfigStore(initialConfig: unknown) {
+  let config = initialConfig as WorkingLineConfig;
+  const save = vi.fn(async (nextConfig: WorkingLineConfig) => {
+    config = nextConfig;
+    return "/Users/test/.pi/agent/settings.json";
+  });
+
+  return {
+    store: {
+      load: vi.fn(() => config),
+      save,
+      getGlobalSettingsPath: () => "/Users/test/.pi/agent/settings.json"
+    },
+    save,
+    getConfig: () => config
   };
 }
 
@@ -238,7 +268,7 @@ describe("installWorkingLine", () => {
     expect(setWorkingMessage).toHaveBeenLastCalledWith("Consulting... · 0s");
   });
 
-  test("registers a read-only status command", async () => {
+  test("shows status and command help", async () => {
     const { pi, command } = createMockPi();
     const notify = vi.fn();
     installWorkingLine(pi as any, {
@@ -254,8 +284,244 @@ describe("installWorkingLine", () => {
 
     expect(notify.mock.calls[0][0]).toContain("pi-working-line enabled");
     expect(notify.mock.calls[0][0]).toContain("tokens: on");
-    expect(notify.mock.calls[0][0]).toContain("turn duration: on, threshold 10s");
-    expect(notify.mock.calls[0][0]).toContain("phrases: 2");
+    expect(notify.mock.calls[0][0]).toContain("Turn duration: on, threshold 10s");
+    expect(notify.mock.calls[0][0]).toContain("Phrases: built-ins + 1 custom");
     expect(notify.mock.calls[0][0]).toContain("Baking... · running bash · 12s · thinking · ↓ 1.8k tokens");
+    expect(notify.mock.calls[0][0]).toContain("/working-line tokens on|off");
+  });
+
+  test("uses a custom panel that toggles tokens in place without closing or notifying", async () => {
+    const { store, save } = createMemoryConfigStore({
+      segments: {
+        tokens: false
+      }
+    });
+    const { pi, command, emit } = createMockPi();
+    const notify = vi.fn();
+    const { rendered, tui, theme, keybindings } = createPanelTestRuntime();
+    const custom = vi.fn(async (factory) => {
+      let result: unknown;
+      const component = await factory(tui, theme, keybindings, (value: unknown) => {
+        result = value;
+      });
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("\n");
+      await Promise.resolve();
+      await Promise.resolve();
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("\u001b");
+      return result;
+    });
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      now: () => Date.now(),
+      configStore: store
+    });
+
+    await command("working-line").handler("", {
+      cwd: "/Users/test/project",
+      hasUI: true,
+      ui: { notify, custom }
+    });
+
+    expect(custom).toHaveBeenCalledTimes(1);
+    expect(rendered[0]).toContain("Baking... · running bash · 12s · thinking");
+    expect(rendered[0]).toContain("Toggle tokens");
+    expect(rendered[0]).toContain("off");
+    expect(rendered[1]).toContain("Baking... · running bash · 12s · thinking · ↓ 1.8k tokens");
+    expect(rendered[1]).toContain("on");
+    expect(save.mock.calls[0][0].segments.tokens).toBe(true);
+    expect(notify).not.toHaveBeenCalled();
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+    emit("message_update", { ui: { setWorkingMessage } }, {
+      assistantMessageEvent: { type: "text_delta", delta: "x".repeat(7200) }
+    });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 0s · ↓ 1.8k tokens");
+  });
+
+  test("custom panel returns add phrase action and reopens phrases screen after saving", async () => {
+    const { store, save, getConfig } = createMemoryConfigStore({});
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    const input = vi.fn(async (_title?: string) => "Reticulating");
+    const { rendered, tui, theme, keybindings } = createPanelTestRuntime();
+    const custom = vi.fn()
+      .mockImplementationOnce(async (factory) => {
+        let result: unknown;
+        const component = await factory(tui, theme, keybindings, (value: unknown) => {
+          result = value;
+        });
+        component.handleInput("\u001b[B");
+        component.handleInput("\u001b[B");
+        component.handleInput("\u001b[B");
+        component.handleInput("\u001b[B");
+        component.handleInput("\n");
+        await Promise.resolve();
+        await Promise.resolve();
+        return result;
+      })
+      .mockImplementationOnce(async (factory) => {
+        let result: unknown;
+        const component = await factory(tui, theme, keybindings, (value: unknown) => {
+          result = value;
+        });
+        rendered.push(component.render(80).join("\n"));
+        component.handleInput("\n");
+        await Promise.resolve();
+        await Promise.resolve();
+        return result;
+      })
+      .mockImplementationOnce(async (factory) => {
+        let result: unknown;
+        const component = await factory(tui, theme, keybindings, (value: unknown) => {
+          result = value;
+        });
+        rendered.push(component.render(80).join("\n"));
+        component.handleInput("\u001b");
+        return result;
+      });
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      configStore: store
+    });
+
+    await command("working-line").handler("", {
+      cwd: "/Users/test/project",
+      hasUI: true,
+      ui: { notify, custom, input }
+    });
+
+    expect(custom).toHaveBeenCalledTimes(3);
+    expect(rendered[0]).toContain("Configure phrases");
+    expect(rendered[0]).toContain("Custom phrases: 0");
+    expect(rendered[1]).toContain("Custom phrases: 1");
+    expect(input.mock.calls[0][0]).toBe("New phrase:");
+    expect(save.mock.calls[0][0].phrases).toEqual({
+      mode: "append",
+      verbs: ["Reticulating"]
+    });
+    expect(getConfig().phrases.verbs).toEqual(["Reticulating"]);
+    expect(notify.mock.calls[0][0]).toContain("Added phrase: Reticulating");
+  });
+
+  test("main custom panel omits low-use actions", async () => {
+    const { store } = createMemoryConfigStore({});
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    const { rendered, tui, theme, keybindings } = createPanelTestRuntime();
+    const custom = vi.fn(async (factory) => {
+      let result: unknown;
+      const component = await factory(tui, theme, keybindings, (value: unknown) => {
+        result = value;
+      });
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("\u001b");
+      return result;
+    });
+    installWorkingLine(pi as any, {
+      configStore: store
+    });
+
+    await command("working-line").handler("", {
+      cwd: "/Users/test/project",
+      hasUI: true,
+      ui: { notify, custom }
+    });
+
+    expect(rendered[0]).not.toContain("Done");
+    expect(rendered[0]).not.toContain("Reset to defaults");
+    expect(rendered[0]).not.toContain("Status / help");
+  });
+
+  test("custom panel supports j and k navigation", async () => {
+    const { store, save } = createMemoryConfigStore({
+      segments: {
+        thinking: true
+      }
+    });
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    const { rendered, tui, theme, keybindings } = createPanelTestRuntime();
+    const custom = vi.fn(async (factory) => {
+      let result: unknown;
+      const component = await factory(tui, theme, keybindings, (value: unknown) => {
+        result = value;
+      });
+      component.handleInput("j");
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("\n");
+      await Promise.resolve();
+      await Promise.resolve();
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("k");
+      rendered.push(component.render(80).join("\n"));
+      component.handleInput("\u001b");
+      return result;
+    });
+    installWorkingLine(pi as any, {
+      configStore: store
+    });
+
+    await command("working-line").handler("", {
+      cwd: "/Users/test/project",
+      hasUI: true,
+      ui: { notify, custom }
+    });
+
+    expect(rendered[0]).toContain("Toggle thinking");
+    expect(save.mock.calls[0][0].segments.thinking).toBe(false);
+    expect(rendered[1]).toContain("Toggle thinking");
+    expect(rendered[1]).toContain("off");
+    expect(rendered[2]).toContain("Toggle tokens");
+  });
+
+  test("blocks replace mode when there are no custom phrases", async () => {
+    const { store, save } = createMemoryConfigStore({});
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    installWorkingLine(pi as any, {
+      configStore: store
+    });
+
+    await command("working-line").handler("phrases mode replace", {
+      cwd: "/Users/test/project",
+      hasUI: false,
+      ui: { notify }
+    });
+
+    expect(save).not.toHaveBeenCalled();
+    expect(notify.mock.calls[0][0]).toContain("Add at least one custom phrase before switching to replace mode.");
+  });
+
+  test("supports direct phrase and turn-duration commands", async () => {
+    const { store, save, getConfig } = createMemoryConfigStore({});
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    installWorkingLine(pi as any, {
+      configStore: store
+    });
+
+    await command("working-line").handler("phrases add Consulting", {
+      cwd: "/Users/test/project",
+      hasUI: false,
+      ui: { notify }
+    });
+    await command("working-line").handler("phrases mode replace", {
+      cwd: "/Users/test/project",
+      hasUI: false,
+      ui: { notify }
+    });
+    await command("working-line").handler("turn-duration threshold 45s", {
+      cwd: "/Users/test/project",
+      hasUI: false,
+      ui: { notify }
+    });
+
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(getConfig().phrases).toEqual({ mode: "replace", verbs: ["Consulting"] });
+    expect(getConfig().turnDuration.thresholdMs).toBe(45_000);
   });
 });

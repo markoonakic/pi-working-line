@@ -40,6 +40,50 @@ For local development:
 - It does not replace spinner frames.
 - It does not integrate with task/subagent extensions yet.
 
+## Command
+
+```text
+/working-line
+```
+
+Opens a compact Pi-native menu for common settings:
+
+```text
+pi-working-line
+Baking... · running bash · 12s · thinking
+
+> Toggle tokens        off
+  Toggle thinking      on
+  Toggle tool suffix   on
+  Toggle turn message  off
+  Configure phrases
+```
+
+Power-user commands:
+
+```text
+/working-line status
+/working-line help
+/working-line tokens on|off
+/working-line thinking on|off
+/working-line suffix on|off
+/working-line turn-duration on|off
+/working-line turn-duration threshold 45s
+/working-line phrases add Reticulating
+/working-line phrases mode append|replace
+/working-line phrases reset
+/working-line reset
+```
+
+`Configure phrases` lets you add one phrase, edit custom phrases one per line,
+switch between `append` and `replace`, or reset custom phrases. `replace` mode
+requires at least one custom phrase.
+
+Command changes are saved to global `~/.pi/agent/settings.json` and applied to
+the current session immediately. Project `.pi/settings.json` overrides are read
+when rendering working lines, but command writes are intentionally global because
+this is personal UI behavior.
+
 ## Configuration
 
 Configure it in `~/.pi/agent/settings.json`:
@@ -118,13 +162,7 @@ Replace the built-in list entirely:
 }
 ```
 
-## Command
-
-```text
-/working-line
-```
-
-Shows the effective configuration, phrase count, and a sample rendered line.
+Manual JSON editing is optional. Use `/working-line` for normal configuration.
 
 ## Compatibility
 

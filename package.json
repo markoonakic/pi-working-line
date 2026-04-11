@@ -29,10 +29,12 @@
     "pack:dry": "npm pack --dry-run"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "^0.66.1",
+    "@mariozechner/pi-tui": "^0.66.1",
     "@types/node": "^25.0.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
