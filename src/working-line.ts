@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import { loadConfigFromSettingsFile, normalizeConfig } from "./config.js";
 import { composeWorkingMessage, formatElapsed, pastTensePhrase } from "./format.js";
-import { DEFAULT_PHRASES, pickPhrase } from "./phrases.js";
+import { DEFAULT_PHRASES, pickPhrase, resolvePhrases } from "./phrases.js";
 
 type Timer = ReturnType<typeof setInterval>;
 
@@ -27,11 +27,11 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
   let outputChars = 0;
   const activeTools = new Map<string, string>();
 
-  const phrases = options.phrases ?? DEFAULT_PHRASES;
+  const config = normalizeConfig(options.config ?? readSettingsConfig());
+  const phrases = resolvePhrases(options.phrases ?? DEFAULT_PHRASES, config.phrases);
   const random = options.random ?? Math.random;
   const now = options.now ?? Date.now;
   const intervalMs = options.intervalMs ?? 1000;
-  const config = normalizeConfig(options.config ?? readSettingsConfig());
 
   function readSettingsConfig(): unknown {
     return loadConfigFromSettingsFile(join(getAgentDir(), "settings.json"), readFileSync);
@@ -177,4 +177,47 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
     if (!config.enabled) return;
     reset(ctx);
   });
+
+  pi.registerCommand("working-line", {
+    description: "Show pi-working-line status and effective configuration",
+    handler: async (_args, ctx) => {
+      ctx.ui.notify(formatStatus(), "info");
+    }
+  });
+
+  function formatStatus(): string {
+    return [
+      `pi-working-line ${config.enabled ? "enabled" : "disabled"}`,
+      "",
+      "Segments:",
+      `  phrase: ${onOff(config.segments.phrase)}`,
+      `  suffix: ${onOff(config.segments.suffix)}`,
+      `  elapsed: ${onOff(config.segments.elapsed)}`,
+      `  thinking: ${onOff(config.segments.thinking)}`,
+      `  tokens: ${onOff(config.segments.tokens)}`,
+      "",
+      `turn duration: ${onOff(config.turnDuration.enabled)}, threshold ${formatElapsed(config.turnDuration.thresholdMs)}`,
+      `phrases: ${phrases.length}`,
+      "",
+      "Example:",
+      `  ${composeWorkingMessage({
+        phrase: phrases[0] ?? "Baking",
+        suffix: "running bash",
+        elapsedMs: 12_000,
+        thinking: "thinking",
+        estimatedTokens: 1800,
+        segments: {
+          phrase: config.segments.phrase,
+          suffix: config.segments.suffix,
+          elapsed: config.segments.elapsed,
+          thinking: config.segments.thinking,
+          tokens: true
+        }
+      }) ?? "(default Pi working message)"}`
+    ].join("\n");
+  }
+
+  function onOff(value: boolean): "on" | "off" {
+    return value ? "on" : "off";
+  }
 }

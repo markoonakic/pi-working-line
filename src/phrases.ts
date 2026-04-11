@@ -55,3 +55,14 @@ export function pickPhrase(
   const index = Math.min(phrases.length - 1, Math.floor(random() * phrases.length));
   return phrases[index] ?? "Working";
 }
+
+export function resolvePhrases(
+  defaults: readonly string[] = DEFAULT_PHRASES,
+  config?: { mode?: "append" | "replace"; verbs?: readonly string[] }
+): string[] {
+  const verbs = config?.verbs?.filter((verb) => verb.trim().length > 0) ?? [];
+  if (config?.mode === "replace") {
+    return verbs.length > 0 ? [...verbs] : [...defaults];
+  }
+  return [...defaults, ...verbs];
+}

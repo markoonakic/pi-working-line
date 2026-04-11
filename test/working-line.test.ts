@@ -5,18 +5,27 @@ type Handler = (event: unknown, ctx: any) => void;
 
 function createMockPi() {
   const handlers = new Map<string, Handler[]>();
+  const commands = new Map<string, any>();
   return {
     pi: {
       on(event: string, handler: Handler) {
         const list = handlers.get(event) ?? [];
         list.push(handler);
         handlers.set(event, list);
+      },
+      registerCommand(name: string, options: any) {
+        commands.set(name, options);
       }
     },
     emit(event: string, ctx: any = {}, payload: Record<string, unknown> = {}) {
       for (const handler of handlers.get(event) ?? []) {
         handler({ type: event, ...payload }, ctx);
       }
+    },
+    command(name: string) {
+      const command = commands.get(name);
+      if (!command) throw new Error(`Missing command: ${name}`);
+      return command;
     }
   };
 }
@@ -207,5 +216,46 @@ describe("installWorkingLine", () => {
     emit("agent_end", { ui: { setWorkingMessage } });
 
     expect(setWorkingMessage).not.toHaveBeenCalled();
+  });
+
+  test("uses custom phrase configuration", () => {
+    const { pi, emit } = createMockPi();
+    const setWorkingMessage = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      random: () => 0,
+      now: () => Date.now(),
+      config: {
+        phrases: {
+          mode: "replace",
+          verbs: ["Consulting"]
+        }
+      }
+    });
+
+    emit("agent_start", { ui: { setWorkingMessage } });
+
+    expect(setWorkingMessage).toHaveBeenLastCalledWith("Consulting... · 0s");
+  });
+
+  test("registers a read-only status command", async () => {
+    const { pi, command } = createMockPi();
+    const notify = vi.fn();
+    installWorkingLine(pi as any, {
+      phrases: ["Baking"],
+      config: {
+        segments: { tokens: true },
+        phrases: { mode: "append", verbs: ["Consulting"] },
+        turnDuration: { enabled: true, thresholdMs: 10_000 }
+      }
+    });
+
+    await command("working-line").handler("", { ui: { notify } });
+
+    expect(notify.mock.calls[0][0]).toContain("pi-working-line enabled");
+    expect(notify.mock.calls[0][0]).toContain("tokens: on");
+    expect(notify.mock.calls[0][0]).toContain("turn duration: on, threshold 10s");
+    expect(notify.mock.calls[0][0]).toContain("phrases: 2");
+    expect(notify.mock.calls[0][0]).toContain("Baking... · running bash · 12s · thinking · ↓ 1.8k tokens");
   });
 });

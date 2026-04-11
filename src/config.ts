@@ -11,8 +11,14 @@ export interface TurnDurationConfig {
   thresholdMs: number;
 }
 
+export interface PhraseConfig {
+  mode: "append" | "replace";
+  verbs: string[];
+}
+
 export interface WorkingLineConfig {
   enabled: boolean;
+  phrases: PhraseConfig;
   segments: SegmentConfig;
   turnDuration: TurnDurationConfig;
 }
@@ -21,6 +27,10 @@ export const SETTINGS_KEY = "pi-working-line";
 
 export const DEFAULT_CONFIG: WorkingLineConfig = {
   enabled: true,
+  phrases: {
+    mode: "append",
+    verbs: []
+  },
   segments: {
     phrase: true,
     suffix: true,
@@ -46,6 +56,15 @@ function optionalPositiveNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function normalizePhraseConfig(value: unknown): PhraseConfig {
+  const input = asRecord(value);
+  const mode = input.mode === "replace" ? "replace" : DEFAULT_CONFIG.phrases.mode;
+  const verbs = Array.isArray(input.verbs)
+    ? input.verbs.filter((verb): verb is string => typeof verb === "string" && verb.trim().length > 0)
+    : DEFAULT_CONFIG.phrases.verbs;
+  return { mode, verbs };
+}
+
 export function normalizeConfig(value: unknown): WorkingLineConfig {
   const input = asRecord(value);
   const rawSegments = asRecord(input.segments);
@@ -53,6 +72,7 @@ export function normalizeConfig(value: unknown): WorkingLineConfig {
 
   return {
     enabled: optionalBoolean(input.enabled, DEFAULT_CONFIG.enabled),
+    phrases: normalizePhraseConfig(input.phrases),
     segments: {
       phrase: optionalBoolean(rawSegments.phrase, DEFAULT_CONFIG.segments.phrase),
       suffix: optionalBoolean(rawSegments.suffix, DEFAULT_CONFIG.segments.suffix),

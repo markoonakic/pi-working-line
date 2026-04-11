@@ -48,6 +48,10 @@ Configure it in `~/.pi/agent/settings.json`:
 {
   "pi-working-line": {
     "enabled": true,
+    "phrases": {
+      "mode": "append",
+      "verbs": []
+    },
     "segments": {
       "phrase": true,
       "suffix": true,
@@ -65,6 +69,8 @@ Configure it in `~/.pi/agent/settings.json`:
 
 Defaults:
 
+- `phrases.mode`: `append`
+- `phrases.verbs`: `[]`
 - `phrase`: on
 - `suffix`: on
 - `elapsed`: on
@@ -83,6 +89,42 @@ Example turn-duration message when enabled:
 ```text
 Baked for 1m 06s
 ```
+
+### Custom Phrases
+
+Append your own phrases to the built-in list:
+
+```json
+{
+  "pi-working-line": {
+    "phrases": {
+      "mode": "append",
+      "verbs": ["Consulting", "Reticulating"]
+    }
+  }
+}
+```
+
+Replace the built-in list entirely:
+
+```json
+{
+  "pi-working-line": {
+    "phrases": {
+      "mode": "replace",
+      "verbs": ["Consulting", "Reticulating"]
+    }
+  }
+}
+```
+
+## Command
+
+```text
+/working-line
+```
+
+Shows the effective configuration, phrase count, and a sample rendered line.
 
 ## Compatibility
 
