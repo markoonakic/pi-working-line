@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { WorkingLineConfig } from "../src/config.js";
+import piWorkingLine from "../src/index.js";
 import { installWorkingLine } from "../src/working-line.js";
 
 type Handler = (event: unknown, ctx: any) => void;
@@ -7,6 +8,7 @@ type Handler = (event: unknown, ctx: any) => void;
 function createMockPi() {
   const handlers = new Map<string, Handler[]>();
   const commands = new Map<string, any>();
+  const messageRenderers = new Map<string, any>();
   return {
     pi: {
       on(event: string, handler: Handler) {
@@ -16,6 +18,9 @@ function createMockPi() {
       },
       registerCommand(name: string, options: any) {
         commands.set(name, options);
+      },
+      registerMessageRenderer(customType: string, renderer: any) {
+        messageRenderers.set(customType, renderer);
       }
     },
     emit(event: string, ctx: any = {}, payload: Record<string, unknown> = {}) {
@@ -27,6 +32,11 @@ function createMockPi() {
       const command = commands.get(name);
       if (!command) throw new Error(`Missing command: ${name}`);
       return command;
+    },
+    renderer(customType: string) {
+      const renderer = messageRenderers.get(customType);
+      if (!renderer) throw new Error(`Missing renderer: ${customType}`);
+      return renderer;
     }
   };
 }
@@ -198,6 +208,21 @@ describe("installWorkingLine", () => {
     });
 
     expect(setWorkingMessage).toHaveBeenLastCalledWith("Baking... · 0s · ↓ 1.8k tokens");
+  });
+
+  test("registers a dim custom renderer for turn duration messages", () => {
+    const { pi, renderer } = createMockPi();
+    piWorkingLine(pi as any);
+
+    const component = renderer("pi-working-line")(
+      { content: "Baked for 31s", details: { durationMs: 31_000, phrase: "Baking" } },
+      { expanded: false },
+      {
+        fg: (color: string, text: string) => `<${color}>${text}</${color}>`
+      }
+    );
+
+    expect(component.render(80).map((line: string) => line.trimEnd())).toEqual(["<dim> Baked for 31s</dim>"]);
   });
 
   test("sends optional turn duration message after long turns", () => {
