@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { registerWorkingLineCommand, renderCommandPreview } from "./commands.js";
 import { type WorkingLineConfig, normalizeConfig } from "./config.js";
 import { createWorkingLineConfigStore, type WorkingLineConfigStore } from "./config-store.js";

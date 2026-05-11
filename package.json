@@ -1,6 +1,6 @@
 {
   "name": "@markoonakic/pi-working-line",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Claude-style working message phrases and elapsed timer for Pi.",
   "type": "module",
   "license": "MIT",
@@ -41,12 +41,12 @@
     "pack:dry": "npm pack --dry-run"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*",
-    "@mariozechner/pi-tui": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.66.1",
-    "@mariozechner/pi-tui": "^0.66.1",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.74.0",
     "@types/node": "^25.0.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
