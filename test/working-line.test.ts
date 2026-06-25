@@ -225,7 +225,7 @@ describe("installWorkingLine", () => {
     expect(component.render(80).map((line: string) => line.trimEnd())).toEqual(["<dim> Baked for 31s</dim>"]);
   });
 
-  test("sends optional turn duration message after long turns", () => {
+  test("sends optional turn duration message after long turns without triggering another turn", () => {
     const { pi, emit } = createMockPi();
     const setWorkingMessage = vi.fn();
     const sendMessage = vi.fn();
@@ -244,6 +244,9 @@ describe("installWorkingLine", () => {
     vi.advanceTimersByTime(31_000);
     emit("agent_end", { ui: { setWorkingMessage } });
 
+    expect(sendMessage).not.toHaveBeenCalled();
+    vi.runOnlyPendingTimers();
+
     expect(sendMessage).toHaveBeenCalledWith({
       customType: "pi-working-line",
       content: "Baked for 31s",
@@ -253,6 +256,19 @@ describe("installWorkingLine", () => {
         phrase: "Baking"
       }
     });
+  });
+
+  test("removes working-line status messages from model context", () => {
+    const { pi, emit } = createMockPi();
+    installWorkingLine(pi as any, { phrases: ["Baking"] });
+    const workingLineMessage = { role: "custom", customType: "pi-working-line", content: "Baked for 31s" };
+    const otherMessage = { role: "custom", customType: "other", content: "keep me" };
+    const userMessage = { role: "user", content: [{ type: "text", text: "hello" }] };
+    const messages = [workingLineMessage, otherMessage, userMessage];
+
+    emit("context", {}, { messages });
+
+    expect(messages).toEqual([otherMessage, userMessage]);
   });
 
   test("does nothing when disabled", () => {

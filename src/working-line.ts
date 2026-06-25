@@ -6,6 +6,7 @@ import { composeWorkingMessage, formatElapsed, pastTensePhrase } from "./format.
 import { DEFAULT_PHRASES, pickPhrase, resolvePhrases } from "./phrases.js";
 
 type Timer = ReturnType<typeof setInterval>;
+type Timeout = ReturnType<typeof setTimeout>;
 
 export interface WorkingLineOptions {
   phrases?: readonly string[];
@@ -25,6 +26,7 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
   let thinkingStartedAt: number | undefined;
   let thoughtDurationMs: number | undefined;
   let outputChars = 0;
+  let durationMessageTimer: Timeout | undefined;
   const activeTools = new Map<string, string>();
 
   const configStore = options.configStore ?? createWorkingLineConfigStore();
@@ -48,6 +50,12 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
     if (!timer) return;
     clearInterval(timer);
     timer = undefined;
+  }
+
+  function clearDurationMessageTimer(): void {
+    if (!durationMessageTimer) return;
+    clearTimeout(durationMessageTimer);
+    durationMessageTimer = undefined;
   }
 
   function render(): void {
@@ -110,9 +118,9 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
     return known[toolName] ?? `running ${toolName}`;
   }
 
-  function maybeSendTurnDuration(ctx: ExtensionContext, durationMs: number): void {
+  function maybeSendTurnDuration(durationMs: number): void {
     if (!config.turnDuration.enabled || durationMs < config.turnDuration.thresholdMs) return;
-    pi.sendMessage({
+    const message = {
       customType: "pi-working-line",
       content: `${pastTensePhrase(phrase)} for ${formatElapsed(durationMs)}`,
       display: true,
@@ -120,14 +128,22 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
         durationMs,
         phrase
       }
-    });
+    };
+
+    // ponytail: defer past agent_end; direct send there is queued as steering and causes an extra turn.
+    durationMessageTimer = setTimeout(() => {
+      durationMessageTimer = undefined;
+      pi.sendMessage(message);
+    }, 0);
+    durationMessageTimer.unref?.();
   }
 
   function reset(ctx?: ExtensionContext, options?: { sendTurnDuration?: boolean }): void {
     const durationMs = startedAt > 0 ? now() - startedAt : 0;
     clearTimer();
+    clearDurationMessageTimer();
     if (ctx && options?.sendTurnDuration) {
-      maybeSendTurnDuration(ctx, durationMs);
+      maybeSendTurnDuration(durationMs);
     }
     activeCtx = undefined;
     startedAt = 0;
@@ -184,6 +200,17 @@ export function installWorkingLine(pi: ExtensionAPI, options: WorkingLineOptions
   pi.on("session_shutdown", (_event, ctx) => {
     if (!config.enabled) return;
     reset(ctx);
+  });
+
+  pi.on("context", (event) => {
+    const messages = (event as { messages?: unknown[] }).messages;
+    if (!Array.isArray(messages)) return;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i] as { role?: string; customType?: string } | undefined;
+      if (message?.role === "custom" && message.customType === "pi-working-line") {
+        messages.splice(i, 1);
+      }
+    }
   });
 
   registerWorkingLineCommand(pi, {
